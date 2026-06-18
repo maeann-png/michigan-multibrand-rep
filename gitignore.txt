@@ -1,0 +1,7 @@
+.env
+sales_data.csv
+sales_data.preview.json
+__pycache__/
+*.pyc
+venv/
+.venv/
