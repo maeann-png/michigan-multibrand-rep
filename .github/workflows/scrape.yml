@@ -1,0 +1,59 @@
+name: Scrape LeafLink Sales (All Brands)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scrape-leaflink-mi
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scraper
+        env:
+          LEAFLINK_API_KEY: ${{ secrets.LEAFLINK_API_KEY }}
+          LEAFLINK_SELLER_ID: '9105'
+          LEAFLINK_BRAND: ''
+          LEAFLINK_FROM_DATE: '2020-01-01'
+          LEAFLINK_EXCLUDE_STATUSES: 'Cancelled,Rejected'
+          LEAFLINK_PULL_INVENTORY: '1'
+        run: python scraper.py
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # sales_data.json.gz is binary and is fully regenerated each run, so it can
+          # never be merged — our fresh copy must always win. Sync to the latest remote
+          # first, then lay our new file on top and commit. Retry if the remote moves.
+          ok=0
+          for i in 1 2 3; do
+            git fetch origin main
+            git reset --mixed origin/main
+            git add sales_data.json.gz
+            if git diff --staged --quiet; then
+              echo "No data changes to commit."; ok=1; break
+            fi
+            git commit -m "Auto-update sales_data.json.gz [skip ci]"
+            if git push origin main; then ok=1; break; fi
+            echo "Push raced with remote (attempt $i) — re-syncing..."; sleep 3
+          done
+          [ "$ok" = "1" ] || { echo "Could not push after retries"; exit 1; }
