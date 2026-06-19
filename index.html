@@ -12,8 +12,8 @@
   :root {
     /* Medfarms · Michigan — "Lavender" light theme, purple accents */
     --bg: #DAB1DA;             /* page — light lavender (client spec) */
-    --bg-elev: #faf6fd;        /* cards — near-white lavender */
-    --bg-elev-2: #f0e6f7;      /* table headers / hover surfaces */
+    --bg-elev: #f1f1f4;        /* cards — light gray */
+    --bg-elev-2: #e7e7ec;      /* table headers / hover surfaces — gray */
     --border: #c39ad2;
     --border-soft: #e4d2ee;
     --text: #2c1b3d;           /* deep purple-black */
@@ -404,6 +404,24 @@
 .brand-btn-all.brand-btn-active { background: var(--accent); border-color: var(--accent-deep); color: #fff; }
 .sf-brand-all { border-color: var(--accent-dim); color: var(--accent); font-weight: 600; }
 .sf-brand-all.sf-brand-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* --- revision: centered + larger card numbers, maximize card space --- */
+.kpi { align-items: center; text-align: center; justify-content: center; min-height: 124px; gap: 9px; padding: 24px 18px; }
+.kpi-label { text-align: center; }
+.kpi-value { font-size: 44px; line-height: 1.04; overflow-wrap: anywhere; }
+.kpi-sub { text-align: center; }
+
+.scope-card { align-items: center; text-align: center; justify-content: center; min-height: 148px; }
+.scope-label { text-align: center; }
+.scope-value { font-size: 58px; line-height: 0.98; }
+
+.aging-card { align-items: center; text-align: center; justify-content: center; min-height: 124px; }
+.aging-card .kpi-label { text-align: center; }
+
+@media (max-width: 1100px) {
+  .kpi-value { font-size: 34px; }
+  .scope-value { font-size: 40px; }
+}
 
 </style>
 </head>
