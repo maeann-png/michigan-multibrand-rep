@@ -1253,6 +1253,7 @@ function RepDashboard({
   const normalized = useMemo(() => normalizeRows(rows), [rows]);
   const fetchedAt = parseDate(data.fetched_at) || new Date();
   const [selectedOrder, setSelectedOrder] = useState('');
+  const [invStatus, setInvStatus] = useState('');
   const preScope = useMemo(() => normalized.filter(r => {
     if (r._bucket === 'excluded' || r._excludedStatus) return false;
     if (filters.from || filters.to) {
@@ -1460,7 +1461,8 @@ function RepDashboard({
   }, [filtered]);
   const buyerPager = usePager(topBuyers, 12);
   const productPager = usePager(productBreakdown, 20);
-  const invPager = usePager(invoices, 25);
+  const invoicesView = useMemo(() => invStatus ? invoices.filter(o => o.status === invStatus) : invoices, [invoices, invStatus]);
+  const invPager = usePager(invoicesView, 25);
   const reset = () => setFilters({
     from: '',
     to: '',
@@ -1752,11 +1754,21 @@ function RepDashboard({
     pager: buyerPager
   }))), /*#__PURE__*/React.createElement("section", {
     className: "section"
-  }, /*#__PURE__*/React.createElement(SectionHeader, {
-    title: "Invoices",
-    em: "\xB7 per order",
-    meta: fmtNum(invoices.length) + ' invoices'
-  }), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "section-header",
+    style: {
+      flexWrap: 'wrap',
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "section-title"
+  }, "Invoices ", /*#__PURE__*/React.createElement("em", null, "\xB7 per order")), /*#__PURE__*/React.createElement("div", {
+    className: "seg"
+  }, [['', 'All'], ['Paid', 'Paid'], ['Overdue', 'Overdue'], ['Unpaid', 'Unpaid']].map(([k, l]) => /*#__PURE__*/React.createElement("button", {
+    key: k || 'all',
+    className: 'seg-btn' + (invStatus === k ? ' seg-active' : ''),
+    onClick: () => setInvStatus(k)
+  }, l)))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 0,
