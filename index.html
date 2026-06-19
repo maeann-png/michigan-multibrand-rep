@@ -1251,7 +1251,7 @@ function RepDashboard({
 }) {
   const rows = data.rows || [];
   const normalized = useMemo(() => normalizeRows(rows), [rows]);
-  const fetchedAt = parseDate(data.fetched_at) || new Date();
+  const fetchedAt = data.fetched_at ? new Date(data.fetched_at) : new Date();
   const [selectedOrder, setSelectedOrder] = useState('');
   const [invStatus, setInvStatus] = useState('');
   const preScope = useMemo(() => normalized.filter(r => {
