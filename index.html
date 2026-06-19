@@ -1564,10 +1564,10 @@ function RepDashboard({
   }), /*#__PURE__*/React.createElement("div", {
     className: "kpi-grid"
   }, /*#__PURE__*/React.createElement(Kpi, {
-    label: "Top Rep",
+    label: filters.rep ? 'Rep' : 'Top Rep',
     value: repStats[0] ? repStats[0].name : '—',
     accent: true,
-    sub: repStats[0] ? fmtMoney(repStats[0].revenue) + (totalRev ? ' · ' + (repStats[0].revenue / totalRev * 100).toFixed(0) + '%' : '') : ''
+    sub: repStats[0] ? fmtMoney(repStats[0].revenue) + (!filters.rep && totalRev ? ' · ' + (repStats[0].revenue / totalRev * 100).toFixed(0) + '%' : '') : ''
   }), /*#__PURE__*/React.createElement(Kpi, {
     label: "Orders",
     value: fmtNum(kpis.orders),
