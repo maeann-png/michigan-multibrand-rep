@@ -12,8 +12,8 @@
   :root {
     /* Medfarms · Michigan — "Lavender" light theme, purple accents */
     --bg: #DAB1DA;             /* page — light lavender (client spec) */
-    --bg-elev: #f1f1f4;        /* cards — light gray */
-    --bg-elev-2: #e7e7ec;      /* table headers / hover surfaces — gray */
+    --bg-elev: #e2e1e8;        /* cards — gray (darker so white VPD shows) */
+    --bg-elev-2: #d5d4dd;      /* table headers / hover surfaces — gray */
     --border: #c39ad2;
     --border-soft: #e4d2ee;
     --text: #2c1b3d;           /* deep purple-black */
@@ -423,6 +423,21 @@
   .scope-value { font-size: 40px; }
 }
 
+/* pagination */
+.pager { display:flex; align-items:center; justify-content:center; gap:16px; padding:14px 16px; border-top:1px solid var(--border); }
+.pager-btn { font-family:'JetBrains Mono',monospace; font-size:12px; padding:7px 16px; background:var(--bg-elev-2);
+  border:1.5px solid var(--accent-dim); color:var(--accent); border-radius:999px; cursor:pointer; transition:all .15s var(--ease); }
+.pager-btn:hover:not(:disabled) { background:var(--accent); color:#fff; border-color:var(--accent); }
+.pager-btn:disabled { opacity:.4; cursor:default; }
+.pager-info { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-dim); letter-spacing:.04em; }
+.inv-clickable tbody tr { cursor:pointer; }
+.inv-clickable tbody tr:hover td { background:rgba(168,45,138,0.07); }
+.focus-banner { display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--bg-elev);
+  border:1px solid var(--accent-dim); border-left:3px solid var(--accent); border-radius:var(--radius-sm);
+  padding:10px 16px; margin-bottom:16px; font-size:13px; }
+.focus-clear { font-family:'JetBrains Mono',monospace; font-size:11px; padding:5px 12px; background:var(--accent);
+  color:#fff; border:none; border-radius:999px; cursor:pointer; letter-spacing:.06em; }
+
 </style>
 </head>
 <body>
@@ -673,16 +688,15 @@ function Topbar({
     className: "brand-mark",
     style: {
       alignItems: 'center',
-      gap: 14
+      gap: 16
     }
   }, /*#__PURE__*/React.createElement("img", {
     src: "logo.png",
     alt: "MEDfarms",
     style: {
-      height: 46,
+      height: 50,
       width: 'auto',
-      flexShrink: 0,
-      borderRadius: 8
+      flexShrink: 0
     },
     onError: e => {
       e.target.style.display = 'none';
@@ -691,13 +705,9 @@ function Topbar({
     className: "brand-name",
     style: {
       lineHeight: 1,
-      fontSize: 30
+      fontSize: 27
     }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "brand-grad"
-  }, "MEDFarms"), /*#__PURE__*/React.createElement("span", {
-    className: "brand-sep"
-  }, "\xB7"), /*#__PURE__*/React.createElement("em", {
+  }, /*#__PURE__*/React.createElement("em", {
     style: {
       color: 'var(--text-dim)',
       fontStyle: 'italic',
@@ -1113,6 +1123,50 @@ const categorize = r => {
   return 'Other';
 };
 
+/* ---- Pagination ----------------------------------------------------- */
+function usePager(items, perPage) {
+  const [page, setPage] = useState(0);
+  const pp = perPage || 15;
+  const pages = Math.max(1, Math.ceil(items.length / pp));
+  const p = Math.min(page, pages - 1);
+  useEffect(() => {
+    if (page > pages - 1) setPage(0);
+  }, [items.length]);
+  return {
+    slice: items.slice(p * pp, p * pp + pp),
+    page: p,
+    pages,
+    setPage,
+    total: items.length,
+    perPage: pp
+  };
+}
+function Pager({
+  pager
+}) {
+  const {
+    page,
+    pages,
+    setPage,
+    total,
+    perPage
+  } = pager;
+  if (pages <= 1) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "pager"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "pager-btn",
+    disabled: page === 0,
+    onClick: () => setPage(page - 1)
+  }, "\u2039 Prev"), /*#__PURE__*/React.createElement("span", {
+    className: "pager-info"
+  }, total === 0 ? '0' : page * perPage + 1 + '–' + Math.min((page + 1) * perPage, total), " of ", fmtNum(total), " \xB7 page ", page + 1, "/", pages), /*#__PURE__*/React.createElement("button", {
+    className: "pager-btn",
+    disabled: page >= pages - 1,
+    onClick: () => setPage(page + 1)
+  }, "Next \u203A"));
+}
+
 /* =====================================================================
    SALES BY REP DASHBOARD
    ===================================================================== */
@@ -1134,15 +1188,12 @@ const NAV = [{
   href: 'https://maeann-png.github.io/michigan-multibrand-rep/'
 }];
 const ACTIVE = 'rep';
-function BottomNav() {
-  return /*#__PURE__*/React.createElement("nav", {
-    className: "bottom-nav"
-  }, NAV.map(n => /*#__PURE__*/React.createElement("a", {
-    key: n.key,
-    href: n.href,
-    className: 'bn-tab' + (n.key === ACTIVE ? ' bn-active' : '')
-  }, n.label)));
-}
+const PAY_COLORS = {
+  Paid: '#2e9e57',
+  Overdue: '#d6433f',
+  Unpaid: '#caa11e',
+  Unknown: '#9b87ad'
+};
 function App() {
   const {
     data,
@@ -1192,6 +1243,7 @@ function RepDashboard({
   const rows = data.rows || [];
   const normalized = useMemo(() => normalizeRows(rows), [rows]);
   const fetchedAt = parseDate(data.fetched_at) || new Date();
+  const [selectedOrder, setSelectedOrder] = useState('');
   const preScope = useMemo(() => normalized.filter(r => {
     if (r._bucket === 'excluded' || r._excludedStatus) return false;
     if (filters.from || filters.to) {
@@ -1218,6 +1270,14 @@ function RepDashboard({
   }, [preScope]);
   const inScope = r => scope === 'total' ? r._bucket === 'wholesale' || r._bucket === 'internal' : scope === 'external' ? r._bucket === 'wholesale' : r._bucket === 'internal';
   const filtered = useMemo(() => preScope.filter(inScope), [preScope, scope]);
+
+  // invoice-click focus drives buyers / product / payment
+  const focusRows = useMemo(() => selectedOrder ? filtered.filter(r => r._id === selectedOrder) : filtered, [filtered, selectedOrder]);
+  const selInvoice = useMemo(() => {
+    if (!selectedOrder) return null;
+    const r = filtered.find(x => x._id === selectedOrder);
+    return r ? r.order_number || selectedOrder : selectedOrder;
+  }, [filtered, selectedOrder]);
   const distinct = useMemo(() => ({
     reps: [...new Set(normalized.filter(r => r._bucket !== 'excluded').map(r => r._rep))].sort(),
     brands: PRIMARY_BRANDS.filter(b => normalized.some(r => r._primaries.includes(b)))
@@ -1248,21 +1308,107 @@ function RepDashboard({
   }, [filtered]);
   const totalRev = repStats.reduce((s, r) => s + r.revenue, 0);
   const topReps = repStats.slice(0, 6).map(r => r.name);
-  const series = useMemo(() => groupByPeriod(filtered, grouping, r => r._revenue), [filtered, grouping]);
 
-  // per-rep monthly multi-series (top 6 reps), distinct colors
+  // AR within current scope/filters
+  const ar = useMemo(() => {
+    const open = {};
+    filtered.forEach(r => {
+      if (r.paid === true) return;
+      const id = r._id;
+      if (!id) return;
+      open[id] = (open[id] || 0) + r._revenue;
+    });
+    const outstanding = Object.values(open).reduce((s, v) => s + v, 0);
+    return {
+      outstanding,
+      openInvoices: Object.keys(open).length
+    };
+  }, [filtered]);
+  const kpis = useMemo(() => ({
+    orders: new Set(filtered.map(r => r._id).filter(Boolean)).size,
+    units: filtered.reduce((s, r) => s + r._units, 0),
+    buyers: new Set(filtered.map(r => r.buyer_name).filter(Boolean)).size,
+    revenue: filtered.reduce((s, r) => s + r._revenue, 0)
+  }), [filtered]);
+
+  // per-rep series with Day / Month / Year grouping
   const repSeries = useMemo(() => {
-    const months = {};
+    const periods = {};
     filtered.forEach(r => {
       if (!r._date || !topReps.includes(r._rep)) return;
-      const k = r._date.getFullYear() + '-' + String(r._date.getMonth() + 1).padStart(2, '0');
-      if (!months[k]) months[k] = {
+      let k;
+      if (grouping === 'day') k = ymd(r._date);else if (grouping === 'year') k = String(r._date.getFullYear());else k = r._date.getFullYear() + '-' + String(r._date.getMonth() + 1).padStart(2, '0');
+      if (!periods[k]) periods[k] = {
         period: k
       };
-      months[k][r._rep] = (months[k][r._rep] || 0) + r._revenue;
+      periods[k][r._rep] = (periods[k][r._rep] || 0) + r._revenue;
     });
-    return Object.values(months).sort((a, b) => a.period.localeCompare(b.period));
-  }, [filtered, topReps.join('|')]);
+    return Object.values(periods).sort((a, b) => a.period.localeCompare(b.period));
+  }, [filtered, topReps.join('|'), grouping]);
+  const productBreakdown = useMemo(() => {
+    const m = {};
+    focusRows.forEach(r => {
+      const k = r.product_name;
+      if (!k) return;
+      if (!m[k]) m[k] = {
+        name: k,
+        brand: r._primaries[0] || otherName(r.brand),
+        rep: r._rep,
+        units: 0,
+        net: 0
+      };
+      m[k].units += r._units;
+      m[k].net += r._revenue;
+    });
+    return Object.values(m).map(p => ({
+      ...p,
+      avg: p.units ? p.net / p.units : 0
+    })).sort((a, b) => b.net - a.net);
+  }, [focusRows]);
+  const topBuyers = useMemo(() => {
+    const m = {};
+    focusRows.forEach(r => {
+      const k = r.buyer_name;
+      if (!k) return;
+      m[k] = (m[k] || 0) + r._revenue;
+    });
+    return Object.entries(m).map(([name, value]) => ({
+      name,
+      value
+    })).sort((a, b) => b.value - a.value);
+  }, [focusRows]);
+  const paymentMix = useMemo(() => {
+    const m = {};
+    focusRows.forEach(r => {
+      const k = r.payment_status || 'Unknown';
+      m[k] = (m[k] || 0) + r._revenue;
+    });
+    return Object.entries(m).map(([name, value]) => ({
+      name,
+      value
+    })).sort((a, b) => b.value - a.value);
+  }, [focusRows]);
+  const invoices = useMemo(() => {
+    const m = {};
+    filtered.forEach(r => {
+      const id = r._id;
+      if (!id) return;
+      if (!m[id]) m[id] = {
+        id,
+        invoice: r.order_number || id,
+        date: r._date ? ymd(r._date) : '—',
+        _date: r._date,
+        buyer: r.buyer_name || '—',
+        rep: r._rep,
+        units: 0,
+        revenue: 0,
+        status: r.payment_status || 'Unknown'
+      };
+      m[id].units += r._units;
+      m[id].revenue += r._revenue;
+    });
+    return Object.values(m).sort((a, b) => (b._date?.getTime() || 0) - (a._date?.getTime() || 0));
+  }, [filtered]);
   const repBrand = useMemo(() => {
     const m = {};
     filtered.forEach(r => {
@@ -1278,6 +1424,9 @@ function RepDashboard({
     });
     return Object.values(m).sort((a, b) => PRIMARY_BRANDS.reduce((s, k) => s + b[k], 0) - PRIMARY_BRANDS.reduce((s, k) => s + a[k], 0)).slice(0, 10);
   }, [filtered]);
+  const buyerPager = usePager(topBuyers, 12);
+  const productPager = usePager(productBreakdown, 20);
+  const invPager = usePager(invoices, 25);
   const reset = () => setFilters({
     from: '',
     to: '',
@@ -1349,45 +1498,60 @@ function RepDashboard({
     sub: repStats[0] ? fmtMoney(repStats[0].revenue) + (totalRev ? ' · ' + (repStats[0].revenue / totalRev * 100).toFixed(0) + '%' : '') : ''
   }), /*#__PURE__*/React.createElement(Kpi, {
     label: "Orders",
-    value: fmtNum(repStats.reduce((s, r) => s + r.orders, 0)),
+    value: fmtNum(kpis.orders),
     sub: "across reps"
   }), /*#__PURE__*/React.createElement(Kpi, {
     label: "Units",
-    value: fmtNum(repStats.reduce((s, r) => s + r.units, 0)),
+    value: fmtNum(kpis.units),
     sub: "across reps"
   }), /*#__PURE__*/React.createElement(Kpi, {
     label: "Reps",
     value: fmtNum(repStats.length),
     sub: "with sales"
-  })), /*#__PURE__*/React.createElement(TimeSeriesChart, {
-    title: "Revenue",
-    em: "over time",
-    data: series,
-    grouping: grouping,
-    setGrouping: setGrouping
-  }), /*#__PURE__*/React.createElement("section", {
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "kpi-grid"
+  }, /*#__PURE__*/React.createElement(Kpi, {
+    label: "Net Revenue",
+    value: fmtMoney(kpis.revenue),
+    accent: true,
+    sub: "current scope"
+  }), /*#__PURE__*/React.createElement(Kpi, {
+    label: "Accounts Receivable",
+    value: fmtMoney(ar.outstanding),
+    sub: "outstanding"
+  }), /*#__PURE__*/React.createElement(Kpi, {
+    label: "Open Accounts",
+    value: fmtNum(ar.openInvoices),
+    sub: "unpaid invoices"
+  }), /*#__PURE__*/React.createElement(Kpi, {
+    label: "Active Buyers",
+    value: fmtNum(kpis.buyers),
+    sub: "unique accounts"
+  })), selectedOrder && /*#__PURE__*/React.createElement("div", {
+    className: "focus-banner"
+  }, /*#__PURE__*/React.createElement("span", null, "Focused on invoice ", /*#__PURE__*/React.createElement("strong", {
+    style: {
+      color: 'var(--accent)'
+    }
+  }, selInvoice), " \u2014 top buyers, product breakdown & payment status reflect this invoice."), /*#__PURE__*/React.createElement("button", {
+    className: "focus-clear",
+    onClick: () => setSelectedOrder('')
+  }, "Clear")), /*#__PURE__*/React.createElement("section", {
     className: "section"
-  }, /*#__PURE__*/React.createElement(SectionHeader, {
-    title: "Rep",
-    em: "leaderboard",
-    meta: repStats.length + ' reps'
-  }), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement(RankList, {
-    data: repStats.map(r => ({
-      name: r.name,
-      value: r.revenue
-    }))
-  }))), /*#__PURE__*/React.createElement("section", {
-    className: "section"
-  }, /*#__PURE__*/React.createElement(SectionHeader, {
-    title: "Revenue",
-    em: "by rep \xB7 monthly",
-    meta: "top 6 reps"
-  }), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "section-header"
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "section-title"
+  }, "Revenue ", /*#__PURE__*/React.createElement("em", null, "over time \xB7 by rep")), /*#__PURE__*/React.createElement("div", {
+    className: "seg"
+  }, [['day', 'Day'], ['month', 'Month'], ['year', 'Year']].map(([k, l]) => /*#__PURE__*/React.createElement("button", {
+    key: k,
+    className: 'seg-btn' + (grouping === k ? ' seg-active' : ''),
+    onClick: () => setGrouping(k)
+  }, l)))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
-      height: 340
+      height: 360
     }
   }, /*#__PURE__*/React.createElement(ResponsiveContainer, {
     width: "100%",
@@ -1445,6 +1609,176 @@ function RepDashboard({
     strokeWidth: 2,
     dot: false
   })))))), /*#__PURE__*/React.createElement("section", {
+    className: "section"
+  }, /*#__PURE__*/React.createElement(SectionHeader, {
+    title: "Rep",
+    em: "leaderboard",
+    meta: repStats.length + ' reps'
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement(RankList, {
+    data: repStats.map(r => ({
+      name: r.name,
+      value: r.revenue
+    }))
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "section"
+  }, /*#__PURE__*/React.createElement(SectionHeader, {
+    title: "Top product",
+    em: "breakdown",
+    meta: fmtNum(productBreakdown.length) + ' products'
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 0,
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      overflowX: 'auto'
+    }
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "data-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Product"), /*#__PURE__*/React.createElement("th", null, "Brand"), /*#__PURE__*/React.createElement("th", null, "Rep"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Units"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Net"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Avg $"))), /*#__PURE__*/React.createElement("tbody", null, productPager.slice.map((p, i) => /*#__PURE__*/React.createElement("tr", {
+    key: i
+  }, /*#__PURE__*/React.createElement("td", null, p.name), /*#__PURE__*/React.createElement("td", {
+    style: {
+      color: brandColor(p.brand)
+    }
+  }, brandLabel(p.brand)), /*#__PURE__*/React.createElement("td", {
+    className: "dim"
+  }, p.rep), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, fmtNum(p.units)), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(p.net))), /*#__PURE__*/React.createElement("td", {
+    className: "num dim"
+  }, fmtMoneyFull(p.avg))))))), /*#__PURE__*/React.createElement(Pager, {
+    pager: productPager
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "section"
+  }, /*#__PURE__*/React.createElement(SectionHeader, {
+    title: "Top buyers",
+    em: "breakdown",
+    meta: fmtNum(topBuyers.length) + ' buyers'
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 24
+    }
+  }, /*#__PURE__*/React.createElement(RankList, {
+    data: buyerPager.slice
+  })), /*#__PURE__*/React.createElement(Pager, {
+    pager: buyerPager
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "section"
+  }, /*#__PURE__*/React.createElement(SectionHeader, {
+    title: "Invoices",
+    em: "\xB7 per order",
+    meta: fmtNum(invoices.length) + ' invoices'
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 0,
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      overflowX: 'auto'
+    }
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "data-table inv-clickable"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Invoice #"), /*#__PURE__*/React.createElement("th", null, "Date"), /*#__PURE__*/React.createElement("th", null, "Buyer"), /*#__PURE__*/React.createElement("th", null, "Rep"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Units"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Revenue"), /*#__PURE__*/React.createElement("th", null, "Payment"))), /*#__PURE__*/React.createElement("tbody", null, invPager.slice.map((o, i) => /*#__PURE__*/React.createElement("tr", {
+    key: i,
+    onClick: () => setSelectedOrder(selectedOrder === o.id ? '' : o.id),
+    style: selectedOrder === o.id ? {
+      background: 'rgba(168,45,138,0.14)'
+    } : undefined
+  }, /*#__PURE__*/React.createElement("td", {
+    className: "font-mono",
+    style: {
+      color: 'var(--accent)'
+    }
+  }, o.invoice), /*#__PURE__*/React.createElement("td", {
+    className: "dim font-mono"
+  }, o.date), /*#__PURE__*/React.createElement("td", null, o.buyer), /*#__PURE__*/React.createElement("td", {
+    className: "dim"
+  }, o.rep), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, fmtNum(o.units)), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.revenue))), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(StatusPill, {
+    status: o.status
+  }))))))), /*#__PURE__*/React.createElement(Pager, {
+    pager: invPager
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "section"
+  }, /*#__PURE__*/React.createElement(SectionHeader, {
+    title: "Payment",
+    em: "status",
+    meta: "AR mix"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "grid-2"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      height: 300,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }
+  }, /*#__PURE__*/React.createElement(ResponsiveContainer, {
+    width: "100%",
+    height: "100%"
+  }, /*#__PURE__*/React.createElement(PieChart, null, /*#__PURE__*/React.createElement(Pie, {
+    data: paymentMix,
+    dataKey: "value",
+    nameKey: "name",
+    cx: "50%",
+    cy: "50%",
+    innerRadius: 60,
+    outerRadius: 108,
+    paddingAngle: 2,
+    stroke: "var(--bg-elev)",
+    strokeWidth: 2
+  }, paymentMix.map((d, i) => /*#__PURE__*/React.createElement(Cell, {
+    key: i,
+    fill: PAY_COLORS[d.name] || '#9b87ad'
+  }))), /*#__PURE__*/React.createElement(Tooltip, {
+    contentStyle: {
+      background: 'var(--bg-elev)',
+      border: '1px solid var(--border)',
+      borderRadius: 8,
+      fontSize: 12
+    },
+    formatter: v => fmtMoneyFull(v)
+  }), /*#__PURE__*/React.createElement(Legend, {
+    verticalAlign: "bottom",
+    iconType: "square",
+    wrapperStyle: {
+      fontSize: 11,
+      fontFamily: 'JetBrains Mono',
+      color: 'var(--text-dim)'
+    }
+  })))), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement(RankList, {
+    data: paymentMix
+  })))), /*#__PURE__*/React.createElement("section", {
     className: "section"
   }, /*#__PURE__*/React.createElement(SectionHeader, {
     title: "Rep",
