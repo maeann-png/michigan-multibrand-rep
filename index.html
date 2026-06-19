@@ -593,6 +593,13 @@ const AGING = [{
   color: '#d6433f'
 }];
 const agingBucket = days => days <= 30 ? AGING[0] : days <= 60 ? AGING[1] : days <= 90 ? AGING[2] : AGING[3];
+// "Last Order Date" segment labels (same buckets/colors as AGING)
+const RECENCY_LABEL = {
+  current: '30 days',
+  b31: '60 days',
+  b61: '90 days',
+  b91: '90+ days'
+};
 const SERIES_COLORS = ["#4b2e83", "#6a2f9e", "#8e2f9e", "#a82d8a", "#c23a5e", "#7c3aed", "#b0317a", "#c084fc"];
 const isPrimaryName = b => PRIMARY_BRANDS.includes((b || "").trim());
 const otherName = raw => {
@@ -1205,7 +1212,9 @@ function App() {
     from: '',
     to: '',
     rep: '',
-    brand: ''
+    brand: '',
+    search: '',
+    lastOrder: ''
   });
   if (error) return /*#__PURE__*/React.createElement("div", {
     className: "app"
@@ -1254,6 +1263,10 @@ function RepDashboard({
     }
     if (filters.rep && r._rep !== filters.rep) return false;
     if (filters.brand && !r._primaries.includes(filters.brand)) return false;
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      if (!(String(r.order_number || '') + ' ' + String(r.buyer_name || '') + ' ' + String(r.product_name || '') + ' ' + String(r._rep || '')).toLowerCase().includes(q)) return false;
+    }
     return true;
   }), [normalized, filters]);
   const scopeValues = useMemo(() => {
@@ -1268,8 +1281,29 @@ function RepDashboard({
       total: e + i
     };
   }, [preScope]);
+  const refDate = useMemo(() => {
+    let mx = null;
+    normalized.forEach(r => {
+      if (r._bucket !== 'excluded' && r._date && (!mx || r._date > mx)) mx = r._date;
+    });
+    return mx || new Date();
+  }, [normalized]);
+  const buyerBucket = useMemo(() => {
+    const last = {};
+    preScope.forEach(r => {
+      if (!r._date) return;
+      const b = r.buyer_name || '';
+      if (!last[b] || r._date > last[b]) last[b] = r._date;
+    });
+    const m = {};
+    Object.entries(last).forEach(([b, d]) => {
+      m[b] = agingBucket(daysBetween(refDate, d)).key;
+    });
+    return m;
+  }, [preScope, refDate]);
   const inScope = r => scope === 'total' ? r._bucket === 'wholesale' || r._bucket === 'internal' : scope === 'external' ? r._bucket === 'wholesale' : r._bucket === 'internal';
-  const filtered = useMemo(() => preScope.filter(inScope), [preScope, scope]);
+  const scoped = useMemo(() => preScope.filter(inScope), [preScope, scope]);
+  const filtered = useMemo(() => filters.lastOrder ? scoped.filter(r => buyerBucket[r.buyer_name] === filters.lastOrder) : scoped, [scoped, filters.lastOrder, buyerBucket]);
 
   // invoice-click focus drives buyers / product / payment
   const focusRows = useMemo(() => selectedOrder ? filtered.filter(r => r._id === selectedOrder) : filtered, [filtered, selectedOrder]);
@@ -1431,7 +1465,9 @@ function RepDashboard({
     from: '',
     to: '',
     rep: '',
-    brand: ''
+    brand: '',
+    search: '',
+    lastOrder: ''
   });
   const upd = (k, v) => setFilters(f => ({
     ...f,
@@ -1482,7 +1518,41 @@ function RepDashboard({
     value: ""
   }, "All"), distinct.reps.map(b => /*#__PURE__*/React.createElement("option", {
     key: b
-  }, b)))), /*#__PURE__*/React.createElement("button", {
+  }, b)))), /*#__PURE__*/React.createElement("div", {
+    className: "filter-group",
+    style: {
+      minWidth: 220
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "filter-label"
+  }, "Last Order Date"), /*#__PURE__*/React.createElement("div", {
+    className: "aging-btns"
+  }, AGING.map(a => /*#__PURE__*/React.createElement("button", {
+    key: a.key,
+    className: 'aging-btn' + (filters.lastOrder === a.key ? ' aging-btn-active' : ''),
+    style: filters.lastOrder === a.key ? {
+      background: a.color,
+      borderColor: a.color,
+      color: textOn(a.color)
+    } : {
+      borderColor: a.color,
+      color: a.color
+    },
+    onClick: () => upd('lastOrder', filters.lastOrder === a.key ? '' : a.key)
+  }, RECENCY_LABEL[a.key])))), /*#__PURE__*/React.createElement("div", {
+    className: "filter-group",
+    style: {
+      minWidth: 190
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "filter-label"
+  }, "Search"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    className: "filter-input",
+    placeholder: "invoice / product / buyer\u2026",
+    value: filters.search,
+    onChange: e => upd('search', e.target.value)
+  })), /*#__PURE__*/React.createElement("button", {
     className: "filter-reset filter-reset-lg",
     onClick: reset
   }, "Reset")), /*#__PURE__*/React.createElement(ScopeCards, {
