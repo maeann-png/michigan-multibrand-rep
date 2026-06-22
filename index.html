@@ -438,6 +438,10 @@
 .focus-clear { font-family:'JetBrains Mono',monospace; font-size:11px; padding:5px 12px; background:var(--accent);
   color:#fff; border:none; border-radius:999px; cursor:pointer; letter-spacing:.06em; }
 
+/* Sticky-footer back-to-hub link */
+.bn-back { color: var(--text); border-color: var(--accent); font-weight: 600; }
+.bn-back:hover { background: var(--accent-deep); color: #fff !important; border-color: var(--accent); }
+
 </style>
 </head>
 <body>
@@ -1109,11 +1113,10 @@ function StickyFooter({
     }, brandLabel(b)));
   })), /*#__PURE__*/React.createElement("div", {
     className: "sf-nav"
-  }, nav.map(n => /*#__PURE__*/React.createElement("a", {
-    key: n.key,
-    href: n.href,
-    className: 'bn-tab' + (n.key === active ? ' bn-active' : '')
-  }, n.label))));
+  }, /*#__PURE__*/React.createElement("a", {
+    href: "https://maeann-png.github.io/MEDFarms-Hub/",
+    className: "bn-tab bn-back"
+  }, "\u2190 Back to main page")));
 }
 
 // Coarse product category derived from the product name (Apex/LeafLink category
