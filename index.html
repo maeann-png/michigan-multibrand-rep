@@ -442,6 +442,9 @@
 .bn-back { color: var(--text); border-color: var(--accent); font-weight: 600; }
 .bn-back:hover { background: var(--accent-deep); color: #fff !important; border-color: var(--accent); }
 
+/* Scope-card caption */
+.scope-sub { margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .04em; color: var(--text-faint); }
+
 </style>
 </head>
 <body>
@@ -840,7 +843,8 @@ function ScopeCards({
   scope,
   setScope,
   values,
-  fmt
+  fmt,
+  sub
 }) {
   const f = fmt || fmtMoney;
   const items = [['external', 'External'], ['internal', 'Internal'], ['total', 'Total']];
@@ -854,7 +858,9 @@ function ScopeCards({
     className: "scope-label"
   }, l), /*#__PURE__*/React.createElement("div", {
     className: "scope-value tabular"
-  }, f(values[k] || 0)))));
+  }, f(values[k] || 0)), sub && /*#__PURE__*/React.createElement("div", {
+    className: "scope-sub"
+  }, sub))));
 }
 
 /* ---- Colored brand filter buttons ----------------------------------- */
@@ -1563,7 +1569,8 @@ function RepDashboard({
   }, "Reset")), /*#__PURE__*/React.createElement(ScopeCards, {
     scope: scope,
     setScope: setScope,
-    values: scopeValues
+    values: scopeValues,
+    sub: "net revenue \xB7 after discounts"
   }), /*#__PURE__*/React.createElement("div", {
     className: "kpi-grid"
   }, /*#__PURE__*/React.createElement(Kpi, {
