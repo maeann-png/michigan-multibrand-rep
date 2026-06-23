@@ -608,6 +608,61 @@ const RECENCY_LABEL = {
   b91: '90+ days'
 };
 const SERIES_COLORS = ["#4b2e83", "#6a2f9e", "#8e2f9e", "#a82d8a", "#c23a5e", "#7c3aed", "#b0317a", "#c084fc"];
+// High-contrast palette (distinct hues) for category mixes and multi-year lines
+const CONTRAST = ["#2563eb", "#e0792a", "#16a34a", "#dc2626", "#7c3aed", "#0891b2", "#ca8a04", "#db2777", "#0d9488", "#9333ea", "#65a30d", "#be123c"];
+// Quick date ranges (anchored to today)
+const QUICK_RANGES = [{
+  key: 'today',
+  label: 'Today'
+}, {
+  key: 'week',
+  label: 'Last week'
+}, {
+  key: '30',
+  label: '30 days'
+}, {
+  key: '90',
+  label: '90 days'
+}, {
+  key: 'ytd',
+  label: 'YTD'
+}];
+const quickRangeDates = key => {
+  const t = new Date();
+  const to = ymd(t);
+  const back = n => {
+    const x = new Date(t);
+    x.setDate(x.getDate() - n);
+    return ymd(x);
+  };
+  if (key === 'today') return {
+    from: to,
+    to
+  };
+  if (key === 'week') return {
+    from: back(7),
+    to
+  };
+  if (key === '30') return {
+    from: back(30),
+    to
+  };
+  if (key === '90') return {
+    from: back(90),
+    to
+  };
+  if (key === 'ytd') return {
+    from: ymd(new Date(t.getFullYear(), 0, 1)),
+    to
+  };
+  return {
+    from: '',
+    to: ''
+  };
+};
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// Canonical sales-rep roster (always offered in rep filters/tabs even if absent from a given slice)
+const REP_ROSTER = ["Toby Kassa", "Darren Dabish", "Steve Kirma", "Cristina Moceri", "Shawn Dabish"];
 const isPrimaryName = b => PRIMARY_BRANDS.includes((b || "").trim());
 const otherName = raw => {
   const b = (raw || "").trim();
@@ -1210,6 +1265,36 @@ const PAY_COLORS = {
   Unpaid: '#caa11e',
   Unknown: '#9b87ad'
 };
+const isHouseRep = rep => /house|unassigned/i.test(String(rep || '').trim()) || !String(rep || '').trim();
+
+// Rep filter tabs (fixed roster) — replaces the brand tabs on this dashboard
+function RepButtons({
+  value,
+  onChange
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "brand-btns"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: 'brand-btn brand-btn-all' + (value === '' ? ' brand-btn-active' : ''),
+    onClick: () => onChange('')
+  }, "All reps"), REP_ROSTER.map(r => {
+    const active = value === r;
+    const style = active ? {
+      background: 'var(--accent)',
+      borderColor: 'var(--accent)',
+      color: '#fff'
+    } : {
+      borderColor: 'var(--accent-dim)',
+      color: 'var(--accent)'
+    };
+    return /*#__PURE__*/React.createElement("button", {
+      key: r,
+      className: 'brand-btn' + (active ? ' brand-btn-active' : ''),
+      style: style,
+      onClick: () => onChange(active ? '' : r)
+    }, r);
+  }));
+}
 function App() {
   const {
     data,
@@ -1264,6 +1349,7 @@ function RepDashboard({
   const [selectedOrder, setSelectedOrder] = useState('');
   const [invStatus, setInvStatus] = useState('');
   const [lapsedFilter, setLapsedFilter] = useState('');
+  const [lapsedRep, setLapsedRep] = useState('');
   const preScope = useMemo(() => normalized.filter(r => {
     if (r._bucket === 'excluded' || r._excludedStatus) return false;
     if (filters.from || filters.to) {
@@ -1324,16 +1410,29 @@ function RepDashboard({
     return r ? r.order_number || selectedOrder : selectedOrder;
   }, [filtered, selectedOrder]);
 
-  // Lapsed accounts: one row per store (within current rep/scope), keyed off its most recent order
+  // Rep-independent base (date + brand + scope, ignores the rep tab) — for lapsed & missed-opportunity analyses
+  const repIndepBase = useMemo(() => normalized.filter(r => {
+    if (r._bucket === 'excluded' || r._excludedStatus) return false;
+    if (filters.from || filters.to) {
+      if (!r._date) return false;
+      const k = ymd(r._date);
+      if (filters.from && k < filters.from) return false;
+      if (filters.to && k > filters.to) return false;
+    }
+    if (filters.brand && !r._primaries.includes(filters.brand)) return false;
+    return inScope(r);
+  }), [normalized, filters.from, filters.to, filters.brand, scope]);
+
+  // Lapsed accounts: one row per store, keyed off its most recent order (rep = rep on that order)
   const lapsedAccounts = useMemo(() => {
     const last = {};
-    scoped.forEach(r => {
+    repIndepBase.forEach(r => {
       if (!r._date) return;
       const b = r.buyer_name || '';
       if (!b) return;
       if (!last[b] || r._date > last[b].date) last[b] = {
         date: r._date,
-        rep: r._rep || '\u2014'
+        rep: r._rep || 'Unassigned'
       };
     });
     return Object.entries(last).map(([buyer, v]) => {
@@ -1346,8 +1445,36 @@ function RepDashboard({
         bucket: agingBucket(days).key
       };
     }).filter(x => x.bucket !== 'current').sort((a, b) => b.days - a.days);
-  }, [scoped, refDate]);
-  const lapsedView = useMemo(() => lapsedFilter ? lapsedAccounts.filter(x => x.bucket === lapsedFilter) : lapsedAccounts, [lapsedAccounts, lapsedFilter]);
+  }, [repIndepBase, refDate]);
+  const lapsedView = useMemo(() => lapsedAccounts.filter(x => (!lapsedFilter || x.bucket === lapsedFilter) && (!lapsedRep || x.rep === lapsedRep)), [lapsedAccounts, lapsedFilter, lapsedRep]);
+
+  // Missed opportunities: accounts whose orders are on a house account or unassigned
+  const missed = useMemo(() => {
+    const m = {};
+    repIndepBase.forEach(r => {
+      if (!isHouseRep(r._rep)) return;
+      const b = r.buyer_name || '';
+      if (!b) return;
+      if (!m[b]) m[b] = {
+        buyer: b,
+        rep: String(r._rep || '').trim() || 'Unassigned',
+        revenue: 0,
+        orders: new Set(),
+        last: null
+      };
+      m[b].revenue += r._revenue;
+      if (r._id) m[b].orders.add(r._id);
+      if (r._date && (!m[b].last || r._date > m[b].last)) m[b].last = r._date;
+    });
+    return Object.values(m).map(x => ({
+      buyer: x.buyer,
+      rep: x.rep,
+      revenue: x.revenue,
+      orders: x.orders.size,
+      last: x.last,
+      days: x.last ? daysBetween(refDate, x.last) : null
+    })).sort((a, b) => b.revenue - a.revenue);
+  }, [repIndepBase, refDate]);
   const distinct = useMemo(() => ({
     reps: [...new Set(normalized.filter(r => r._bucket !== 'excluded').map(r => r._rep))].sort(),
     brands: PRIMARY_BRANDS.filter(b => normalized.some(r => r._primaries.includes(b)))
@@ -1499,6 +1626,7 @@ function RepDashboard({
   const invoicesView = useMemo(() => invStatus ? invoices.filter(o => o.status === invStatus) : invoices, [invoices, invStatus]);
   const invPager = usePager(invoicesView, 25);
   const lapsedPager = usePager(lapsedView, 15);
+  const missedPager = usePager(missed, 15);
   const reset = () => setFilters({
     from: '',
     to: '',
@@ -1511,6 +1639,14 @@ function RepDashboard({
     ...f,
     [k]: v
   }));
+  const setQuickRange = k => {
+    const r = quickRangeDates(k);
+    setFilters(f => ({
+      ...f,
+      from: r.from,
+      to: r.to
+    }));
+  };
   return /*#__PURE__*/React.createElement("div", {
     className: "app",
     style: {
@@ -1520,10 +1656,9 @@ function RepDashboard({
     section: "Sales By Reps",
     fetchedAt: fetchedAt,
     right: /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("strong", null, repStats.length), " reps")
-  }), /*#__PURE__*/React.createElement(BrandButtons, {
-    brands: distinct.brands,
-    value: filters.brand,
-    onChange: b => upd('brand', b)
+  }), /*#__PURE__*/React.createElement(RepButtons, {
+    value: filters.rep,
+    onChange: r => upd('rep', r)
   }), /*#__PURE__*/React.createElement("div", {
     className: "filters"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1545,18 +1680,24 @@ function RepDashboard({
     value: filters.to,
     onChange: e => upd('to', e.target.value)
   })), /*#__PURE__*/React.createElement("div", {
-    className: "filter-group"
+    className: "filter-group",
+    style: {
+      minWidth: 250
+    }
   }, /*#__PURE__*/React.createElement("label", {
     className: "filter-label"
-  }, "Rep"), /*#__PURE__*/React.createElement("select", {
-    className: "filter-select",
-    value: filters.rep,
-    onChange: e => upd('rep', e.target.value)
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "All"), distinct.reps.map(b => /*#__PURE__*/React.createElement("option", {
-    key: b
-  }, b)))), /*#__PURE__*/React.createElement("div", {
+  }, "Quick range"), /*#__PURE__*/React.createElement("div", {
+    className: "aging-btns"
+  }, QUICK_RANGES.map(q => /*#__PURE__*/React.createElement("button", {
+    key: q.key,
+    type: "button",
+    className: "aging-btn",
+    style: {
+      borderColor: 'var(--accent-dim)',
+      color: 'var(--accent)'
+    },
+    onClick: () => setQuickRange(q.key)
+  }, q.label)))), /*#__PURE__*/React.createElement("div", {
     className: "filter-group",
     style: {
       minWidth: 220
@@ -1720,59 +1861,6 @@ function RepDashboard({
   })))))), /*#__PURE__*/React.createElement("section", {
     className: "section"
   }, /*#__PURE__*/React.createElement(SectionHeader, {
-    title: "Rep",
-    em: "leaderboard",
-    meta: repStats.length + ' reps'
-  }), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement(RankList, {
-    data: repStats.map(r => ({
-      name: r.name,
-      value: r.revenue
-    }))
-  }))), /*#__PURE__*/React.createElement("section", {
-    className: "section"
-  }, /*#__PURE__*/React.createElement(SectionHeader, {
-    title: "Top product",
-    em: "breakdown",
-    meta: fmtNum(productBreakdown.length) + ' products'
-  }), /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 0,
-      overflow: 'hidden'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      overflowX: 'auto'
-    }
-  }, /*#__PURE__*/React.createElement("table", {
-    className: "data-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Product"), /*#__PURE__*/React.createElement("th", null, "Brand"), /*#__PURE__*/React.createElement("th", null, "Rep"), /*#__PURE__*/React.createElement("th", {
-    className: "num"
-  }, "Units"), /*#__PURE__*/React.createElement("th", {
-    className: "num"
-  }, "Net"), /*#__PURE__*/React.createElement("th", {
-    className: "num"
-  }, "Avg $"))), /*#__PURE__*/React.createElement("tbody", null, productPager.slice.map((p, i) => /*#__PURE__*/React.createElement("tr", {
-    key: i
-  }, /*#__PURE__*/React.createElement("td", null, p.name), /*#__PURE__*/React.createElement("td", {
-    style: {
-      color: brandColor(p.brand)
-    }
-  }, brandLabel(p.brand)), /*#__PURE__*/React.createElement("td", {
-    className: "dim"
-  }, p.rep), /*#__PURE__*/React.createElement("td", {
-    className: "num"
-  }, fmtNum(p.units)), /*#__PURE__*/React.createElement("td", {
-    className: "num"
-  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(p.net))), /*#__PURE__*/React.createElement("td", {
-    className: "num dim"
-  }, fmtMoneyFull(p.avg))))))), /*#__PURE__*/React.createElement(Pager, {
-    pager: productPager
-  }))), /*#__PURE__*/React.createElement("section", {
-    className: "section"
-  }, /*#__PURE__*/React.createElement(SectionHeader, {
     title: "Top buyers",
     em: "breakdown",
     meta: fmtNum(topBuyers.length) + ' buyers'
@@ -1822,6 +1910,30 @@ function RepDashboard({
       className: 'seg-btn' + (lapsedFilter === k ? ' seg-active' : ''),
       onClick: () => setLapsedFilter(k)
     }, l)))), /*#__PURE__*/React.createElement("div", {
+      className: "brand-btns",
+      style: {
+        marginTop: 0,
+        marginBottom: 14
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      className: 'brand-btn brand-btn-all' + (lapsedRep === '' ? ' brand-btn-active' : ''),
+      onClick: () => setLapsedRep('')
+    }, "All reps"), REP_ROSTER.map(r => {
+      const active = lapsedRep === r;
+      return /*#__PURE__*/React.createElement("button", {
+        key: r,
+        className: 'brand-btn' + (active ? ' brand-btn-active' : ''),
+        style: active ? {
+          background: 'var(--accent)',
+          borderColor: 'var(--accent)',
+          color: '#fff'
+        } : {
+          borderColor: 'var(--accent-dim)',
+          color: 'var(--accent)'
+        },
+        onClick: () => setLapsedRep(active ? '' : r)
+      }, r);
+    })), /*#__PURE__*/React.createElement("div", {
       className: "card",
       style: {
         padding: 0,
@@ -1866,21 +1978,11 @@ function RepDashboard({
     })));
   })(), /*#__PURE__*/React.createElement("section", {
     className: "section"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "section-header",
-    style: {
-      flexWrap: 'wrap',
-      gap: 12
-    }
-  }, /*#__PURE__*/React.createElement("h2", {
-    className: "section-title"
-  }, "Invoices ", /*#__PURE__*/React.createElement("em", null, "\xB7 per order")), /*#__PURE__*/React.createElement("div", {
-    className: "seg"
-  }, [['', 'All'], ['Paid', 'Paid'], ['Overdue', 'Overdue'], ['Unpaid', 'Unpaid']].map(([k, l]) => /*#__PURE__*/React.createElement("button", {
-    key: k || 'all',
-    className: 'seg-btn' + (invStatus === k ? ' seg-active' : ''),
-    onClick: () => setInvStatus(k)
-  }, l)))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(SectionHeader, {
+    title: "Missed",
+    em: "opportunities",
+    meta: fmtNum(missed.length) + ' house / unassigned accounts'
+  }), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 0,
@@ -1888,91 +1990,49 @@ function RepDashboard({
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      overflowX: 'auto'
+      overflowX: 'auto',
+      maxHeight: 520
     }
   }, /*#__PURE__*/React.createElement("table", {
-    className: "data-table inv-clickable"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Invoice #"), /*#__PURE__*/React.createElement("th", null, "Date"), /*#__PURE__*/React.createElement("th", null, "Buyer"), /*#__PURE__*/React.createElement("th", null, "Rep"), /*#__PURE__*/React.createElement("th", {
+    className: "data-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Store"), /*#__PURE__*/React.createElement("th", null, "Rep"), /*#__PURE__*/React.createElement("th", null, "Last order"), /*#__PURE__*/React.createElement("th", {
     className: "num"
-  }, "Units"), /*#__PURE__*/React.createElement("th", {
+  }, "Days since"), /*#__PURE__*/React.createElement("th", {
     className: "num"
-  }, "Revenue"), /*#__PURE__*/React.createElement("th", null, "Payment"))), /*#__PURE__*/React.createElement("tbody", null, invPager.slice.map((o, i) => /*#__PURE__*/React.createElement("tr", {
-    key: i,
-    onClick: () => setSelectedOrder(selectedOrder === o.id ? '' : o.id),
-    style: selectedOrder === o.id ? {
-      background: 'rgba(168,45,138,0.14)'
-    } : undefined
-  }, /*#__PURE__*/React.createElement("td", {
-    className: "font-mono",
+  }, "Orders"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Revenue"))), /*#__PURE__*/React.createElement("tbody", null, missedPager.slice.map((x, i) => /*#__PURE__*/React.createElement("tr", {
+    key: i
+  }, /*#__PURE__*/React.createElement("td", null, x.buyer), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
     style: {
+      display: 'inline-block',
+      fontFamily: 'JetBrains Mono, monospace',
+      fontSize: 10,
+      textTransform: 'uppercase',
+      letterSpacing: '0.08em',
+      padding: '3px 8px',
+      borderRadius: 6,
+      border: '1px solid var(--accent-dim)',
       color: 'var(--accent)'
     }
-  }, o.invoice), /*#__PURE__*/React.createElement("td", {
+  }, x.rep)), /*#__PURE__*/React.createElement("td", {
     className: "dim font-mono"
-  }, o.date), /*#__PURE__*/React.createElement("td", null, o.buyer), /*#__PURE__*/React.createElement("td", {
-    className: "dim"
-  }, o.rep), /*#__PURE__*/React.createElement("td", {
+  }, x.last ? ymd(x.last) : '—'), /*#__PURE__*/React.createElement("td", {
     className: "num"
-  }, fmtNum(o.units)), /*#__PURE__*/React.createElement("td", {
+  }, x.days == null ? '—' : fmtNum(x.days)), /*#__PURE__*/React.createElement("td", {
+    className: "num dim"
+  }, fmtNum(x.orders)), /*#__PURE__*/React.createElement("td", {
     className: "num"
-  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.revenue))), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(StatusPill, {
-    status: o.status
-  }))))))), /*#__PURE__*/React.createElement(Pager, {
-    pager: invPager
-  }))), /*#__PURE__*/React.createElement("section", {
-    className: "section"
-  }, /*#__PURE__*/React.createElement(SectionHeader, {
-    title: "Payment",
-    em: "status",
-    meta: "AR mix"
-  }), /*#__PURE__*/React.createElement("div", {
-    className: "grid-2"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "card",
+  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(x.revenue))))), missed.length === 0 && /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    colSpan: "6",
     style: {
-      height: 300,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
+      textAlign: 'center',
+      padding: '28px',
+      color: 'var(--text-faint)'
     }
-  }, /*#__PURE__*/React.createElement(ResponsiveContainer, {
-    width: "100%",
-    height: "100%"
-  }, /*#__PURE__*/React.createElement(PieChart, null, /*#__PURE__*/React.createElement(Pie, {
-    data: paymentMix,
-    dataKey: "value",
-    nameKey: "name",
-    cx: "50%",
-    cy: "50%",
-    innerRadius: 60,
-    outerRadius: 108,
-    paddingAngle: 2,
-    stroke: "var(--bg-elev)",
-    strokeWidth: 2
-  }, paymentMix.map((d, i) => /*#__PURE__*/React.createElement(Cell, {
-    key: i,
-    fill: PAY_COLORS[d.name] || '#9b87ad'
-  }))), /*#__PURE__*/React.createElement(Tooltip, {
-    contentStyle: {
-      background: 'var(--bg-elev)',
-      border: '1px solid var(--border)',
-      borderRadius: 8,
-      fontSize: 12
-    },
-    formatter: v => fmtMoneyFull(v)
-  }), /*#__PURE__*/React.createElement(Legend, {
-    verticalAlign: "bottom",
-    iconType: "square",
-    wrapperStyle: {
-      fontSize: 11,
-      fontFamily: 'JetBrains Mono',
-      color: 'var(--text-dim)'
-    }
-  })))), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement(RankList, {
-    data: paymentMix
-  })))), /*#__PURE__*/React.createElement("section", {
+  }, "No house-account or unassigned stores in this view"))))), /*#__PURE__*/React.createElement(Pager, {
+    pager: missedPager
+  }))), /*#__PURE__*/React.createElement("section", {
     className: "section"
   }, /*#__PURE__*/React.createElement(SectionHeader, {
     title: "Rep",
