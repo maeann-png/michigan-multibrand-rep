@@ -1129,7 +1129,10 @@ function StickyFooter({
   active,
   brands,
   brand,
-  onBrand
+  onBrand,
+  reps,
+  repValue,
+  onRep
 }) {
   const [show, setShow] = useState(false);
   useEffect(() => {
@@ -1143,7 +1146,27 @@ function StickyFooter({
   const list = (brands || []).filter(b => b !== '100 Shafer');
   return /*#__PURE__*/React.createElement("nav", {
     className: 'sticky-foot' + (show ? ' sticky-foot-show' : '')
-  }, onBrand && list.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, onRep ? /*#__PURE__*/React.createElement("div", {
+    className: "sf-brands"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: 'sf-brand sf-brand-all' + (repValue === '' ? ' sf-brand-active' : ''),
+    onClick: () => onRep('')
+  }, "All reps"), (reps || []).map(r => {
+    const on = repValue === r;
+    return /*#__PURE__*/React.createElement("button", {
+      key: r,
+      className: 'sf-brand' + (on ? ' sf-brand-active' : ''),
+      style: on ? {
+        background: 'var(--accent)',
+        borderColor: 'var(--accent)',
+        color: '#fff'
+      } : {
+        borderColor: 'var(--accent-dim)',
+        color: 'var(--text)'
+      },
+      onClick: () => onRep(on ? '' : r)
+    }, r);
+  })) : onBrand && list.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "sf-brands"
   }, /*#__PURE__*/React.createElement("button", {
     className: 'sf-brand sf-brand-all' + (brand === '' ? ' sf-brand-active' : ''),
@@ -1702,24 +1725,19 @@ function RepDashboard({
     value: filters.to,
     onChange: e => upd('to', e.target.value)
   })), /*#__PURE__*/React.createElement("div", {
-    className: "filter-group",
-    style: {
-      minWidth: 250
-    }
+    className: "filter-group"
   }, /*#__PURE__*/React.createElement("label", {
     className: "filter-label"
-  }, "Quick range"), /*#__PURE__*/React.createElement("div", {
-    className: "aging-btns"
-  }, QUICK_RANGES.map(q => /*#__PURE__*/React.createElement("button", {
-    key: q.key,
-    type: "button",
-    className: "aging-btn",
-    style: {
-      borderColor: 'var(--accent-dim)',
-      color: 'var(--accent)'
-    },
-    onClick: () => setQuickRange(q.key)
-  }, q.label)))), /*#__PURE__*/React.createElement("div", {
+  }, "Brand"), /*#__PURE__*/React.createElement("select", {
+    className: "filter-select",
+    value: filters.brand,
+    onChange: e => upd('brand', e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "All"), distinct.brands.map(b => /*#__PURE__*/React.createElement("option", {
+    key: b,
+    value: b
+  }, brandLabel(b))))), /*#__PURE__*/React.createElement("div", {
     className: "filter-group",
     style: {
       minWidth: 220
@@ -1756,7 +1774,25 @@ function RepDashboard({
   })), /*#__PURE__*/React.createElement("button", {
     className: "filter-reset filter-reset-lg",
     onClick: reset
-  }, "Reset")), /*#__PURE__*/React.createElement(ScopeCards, {
+  }, "Reset")), /*#__PURE__*/React.createElement("div", {
+    className: "filter-group",
+    style: {
+      marginBottom: 28
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "filter-label"
+  }, "Quick range"), /*#__PURE__*/React.createElement("div", {
+    className: "aging-btns"
+  }, QUICK_RANGES.map(q => /*#__PURE__*/React.createElement("button", {
+    key: q.key,
+    type: "button",
+    className: "aging-btn",
+    style: {
+      borderColor: 'var(--accent-dim)',
+      color: 'var(--accent)'
+    },
+    onClick: () => setQuickRange(q.key)
+  }, q.label)))), /*#__PURE__*/React.createElement(ScopeCards, {
     scope: scope,
     setScope: setScope,
     values: scopeValues,
@@ -2237,9 +2273,9 @@ function RepDashboard({
   }, fmtMoneyFull(r.avg))))))))), /*#__PURE__*/React.createElement(StickyFooter, {
     nav: NAV,
     active: ACTIVE,
-    brands: distinct.brands,
-    brand: filters.brand,
-    onBrand: b => upd('brand', b)
+    reps: REP_ROSTER,
+    repValue: filters.rep,
+    onRep: r => upd('rep', r)
   }));
 }
 ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.createElement(App, null));
