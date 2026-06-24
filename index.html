@@ -1432,7 +1432,7 @@ function RepDashboard({
   }, [normalized]);
   const inWin = (r, key) => {
     if (!r._date) return false;
-    const d = daysBetween(refDate, r._date);
+    const d = daysBetween(new Date(), r._date);
     if (key === 'w90p') return d > 90;
     const w = WINDOWS.find(x => x.key === key);
     return w ? d <= w.days : true;
