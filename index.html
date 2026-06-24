@@ -1430,16 +1430,23 @@ function RepDashboard({
     });
     return mx || new Date();
   }, [normalized]);
-  const inWin = (r, key) => {
-    if (!r._date) return false;
-    const d = daysBetween(new Date(), r._date);
-    if (key === 'w90p') return d > 90;
-    const w = WINDOWS.find(x => x.key === key);
-    return w ? d <= w.days : true;
-  };
+  const buyerLastOrder = useMemo(() => {
+    const last = {};
+    preScope.forEach(r => {
+      if (!r._date) return;
+      const b = r.buyer_name || '';
+      if (!last[b] || r._date > last[b]) last[b] = r._date;
+    });
+    const m = {};
+    Object.entries(last).forEach(([b, d]) => {
+      const days = daysBetween(new Date(), d);
+      m[b] = filters.lastOrder === 'w90p' ? days > 90 : WINDOWS.some(w => w.key === filters.lastOrder && days <= w.days);
+    });
+    return m;
+  }, [preScope, filters.lastOrder]);
   const inScope = r => scope === 'total' ? r._bucket === 'wholesale' || r._bucket === 'internal' : scope === 'external' ? r._bucket === 'wholesale' : r._bucket === 'internal';
   const scoped = useMemo(() => preScope.filter(inScope), [preScope, scope]);
-  const filtered = useMemo(() => filters.lastOrder ? scoped.filter(r => inWin(r, filters.lastOrder)) : scoped, [scoped, filters.lastOrder, refDate]);
+  const filtered = useMemo(() => filters.lastOrder ? scoped.filter(r => buyerLastOrder[r.buyer_name]) : scoped, [scoped, filters.lastOrder, buyerLastOrder]);
 
   // invoice-click focus drives buyers / product / payment
   const focusRows = useMemo(() => selectedOrder ? filtered.filter(r => r._id === selectedOrder) : filtered, [filtered, selectedOrder]);
